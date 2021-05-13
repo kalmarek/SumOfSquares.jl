@@ -1,5 +1,5 @@
 using Pkg
-pkg"add https://github.com/kalmarek/SymbolicWedderburn.jl#bl/sos"
+pkg"add https://github.com/kalmarek/SymbolicWedderburn.jl"
 
 import MutableArithmetics
 const MA = MutableArithmetics

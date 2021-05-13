@@ -11,10 +11,10 @@
 
 using Test #src
 
+
 # Symmetry reduction is still a work in progress in SumOfSquares, so we include the following files that will be incorporated into SumOfSquares.jl once SymbolicWedderburn.jl is released:
 using SumOfSquares
 include(joinpath(dirname(dirname(pathof(SumOfSquares))), "examples", "symmetry.jl"))
-include(joinpath(dirname(dirname(pathof(SumOfSquares))), "examples", "scaled_perm.jl"))
 
 # We start by defining the Dihedral group of order 8.
 # This group is isomorphic to the following permutation group:
@@ -27,67 +27,8 @@ G = PermGroup([c, d])
 # However, in order to illustrate how to do symmetry reduction with a custom group,
 # we show in this example what should be implemented to define a new group.
 
-struct DihedralElement <: GroupElem
-    n::Int
-    reflection::Bool
-    id::Int
-end
-function PermutationGroups.order(el::DihedralElement)
-    if el.reflection
-        return 2
-    else
-        if iszero(el.id)
-            return 1
-        else
-            return div(el.n, gcd(el.n, el.id))
-        end
-    end
-end
-Base.one(el::DihedralElement) = DihedralElement(el.n, false, 0)
-function Base.inv(el::DihedralElement)
-    if el.reflection || iszero(el.id)
-        return el
-    else
-        return DihedralElement(el.n, false, el.n - el.id)
-    end
-end
-function Base.:*(a::DihedralElement, b::DihedralElement)
-    a.n == b.n || error("Cannot multiply elements from different Dihedral groups")
-    id = mod(a.reflection ? a.id - b.id : a.id + b.id, a.n)
-    return DihedralElement(a.n, a.reflection != b.reflection, id)
-end
-function PermutationGroups.mul!(::DihedralElement, a::DihedralElement, b::DihedralElement)
-    return a * b
-end
-function Base.:^(el::DihedralElement, k::Integer)
-    if el.reflection
-        return iseven(k) ? one(el) : el
-    else
-        return DihedralElement(el.n, false, mod(el.id * k, el.n))
-    end
-end
-
-Base.conj(a::DihedralElement, b::DihedralElement) = inv(b) * a * b
-Base.:^(a::DihedralElement, b::DihedralElement) = conj(a, b)
-
-struct DihedralGroup <: Group
-    n::Int
-end
-Base.one(G::DihedralGroup) = DihedralElement(G.n, false, 0)
-PermutationGroups.gens(G::DihedralGroup) = [DihedralElement(G.n, false, 1), DihedralElement(G.n, true, 0)]
-PermutationGroups.order(::Type{T}, G::DihedralGroup) where {T} = convert(T, 2G.n)
-function Base.iterate(G::DihedralGroup, prev::DihedralElement=DihedralElement(G.n, false, -1))
-    if prev.id + 1 >= G.n
-        if prev.reflection
-            return nothing
-        else
-            next = DihedralElement(G.n, true, 0)
-        end
-    else
-        next = DihedralElement(G.n, prev.reflection, prev.id + 1)
-    end
-    return next, next
-end
+include(joinpath(@__DIR__, "dihedral_groups.jl"))
+using .DihedralGroups
 
 # The Robinson form is invariant under the following action of the Dihedral group on monomials:
 # The action of each element of the groups is to map the variables `x, y` to:
@@ -100,9 +41,10 @@ end
 # | 3  | y, -x    | x, -y      |
 
 using DynamicPolynomials
+MP = DynamicPolynomials.MP
 @polyvar x y
 function action(mono::MP.AbstractMonomial, el::DihedralElement)
-    if iseven(el.reflection + el.id)
+    if iseven(DihedralGroups.isreflection(el) + el.id)
         var_x, var_y = x, y
     else
         var_x, var_y = y, x
