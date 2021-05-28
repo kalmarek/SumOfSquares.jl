@@ -1,5 +1,5 @@
 using Pkg
-pkg"add https://github.com/kalmarek/SymbolicWedderburn.jl"
+pkg"dev https://github.com/kalmarek/SymbolicWedderburn.jl"
 
 import MutableArithmetics
 const MA = MutableArithmetics
@@ -13,11 +13,6 @@ using PermutationGroups
 using Cyclotomics
 using SumOfSquares
 
-function SymbolicWedderburn.ExtensionHomomorphism(basis::MB.MonomialBasis, action)
-    monos = collect(basis.monomials)
-    mono_to_index = Dict(monos[i] => i for i in eachindex(monos))
-    return SymbolicWedderburn.ExtensionHomomorphism(monos, mono_to_index, action)
-end
 
 function MP.polynomialtype(::Type{<:MB.AbstractPolynomialVectorBasis{PT}}, T::Type) where PT
     C = MP.coefficienttype(PT)

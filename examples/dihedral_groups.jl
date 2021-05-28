@@ -63,6 +63,8 @@ end
 Base.show(io::IO, D::DihedralGroup) = print(io, "dihedral group of $(D.n)-gon")
 Base.show(io::IO, g::DihedralElement) = print(io, (isreflection(g) ? "R" : "C"), g.id)
 
+
+#=
 # testing
 using Test
 include(joinpath(dirname(pathof(GroupsCore)), "..", "test", "conformance_test.jl"))
@@ -70,5 +72,6 @@ include(joinpath(dirname(pathof(GroupsCore)), "..", "test", "conformance_test.jl
 D = DihedralGroup(6)
 test_Group_interface(D)
 test_GroupElement_interface(rand(D, 2)...)
+=#
 
 end # of module DihedralGroups

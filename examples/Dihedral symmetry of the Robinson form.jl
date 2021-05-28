@@ -14,7 +14,7 @@ using Test #src
 
 # Symmetry reduction is still a work in progress in SumOfSquares, so we include the following files that will be incorporated into SumOfSquares.jl once SymbolicWedderburn.jl is released:
 using SumOfSquares
-include(joinpath(dirname(dirname(pathof(SumOfSquares))), "examples", "symmetry.jl"))
+include(joinpath(@__DIR__, "symmetry.jl"))
 
 # We start by defining the Dihedral group of order 8.
 # This group is isomorphic to the following permutation group:
@@ -41,9 +41,14 @@ using .DihedralGroups
 # | 3  | y, -x    | x, -y      |
 
 using DynamicPolynomials
-MP = DynamicPolynomials.MP
+const MP = DynamicPolynomials.MP
 @polyvar x y
-function action(mono::MP.AbstractMonomial, el::DihedralElement)
+
+struct DihedralAction <: SymbolicWedderburn.ByLinearTransformation end
+SymbolicWedderburn.coeff_type(::DihedralAction) = Int
+function SymbolicWedderburn.action(::DihedralAction, el::DihedralElement, mono::MP.AbstractPolynomial)
+    isone(el) && return mono
+    x,y = variables(mono)
     if iseven(DihedralGroups.isreflection(el) + el.id)
         var_x, var_y = x, y
     else
@@ -51,13 +56,14 @@ function action(mono::MP.AbstractMonomial, el::DihedralElement)
     end
     sign_x = 1 <= el.id <= 2 ? -1 : 1
     sign_y = 2 <= el.id ? -1 : 1
-    return MP.substitute(MP.Eval(), mono, [x, y] => [sign_x * var_x, sign_y * var_y])
+    return mono(x=>sign_x*x, y=>sign_y*y)
+    # return MP.substitute(MP.Eval(), mono, [x, y] => [sign_x * var_x, sign_y * var_y])
 end
-function action(term::MP.AbstractTerm, el::DihedralElement)
-    return MP.coefficient(term) * action(MP.monomial(term), el)
-end
-function action(poly::MP.AbstractPolynomial, el::DihedralElement)
-    return MP.polynomial([action(term, el) for term in MP.terms(poly)])
+
+function SymbolicWedderburn.decompose(k::AbstractPolynomial, hom::SymbolicWedderburn.InducedActionHomomorphism)
+    indcs = [hom[m] for m in monomials(k)]
+    coeffs = coefficients(k)
+    return indcs, coeffs
 end
 
 poly = x^6 + y^6 - x^4 * y^2 - y^4 * x^2 - x^4 - y^4 - x^2 - y^2 + 3x^2 * y^2 + 1
@@ -66,19 +72,20 @@ poly = x^6 + y^6 - x^4 * y^2 - y^4 * x^2 - x^4 - y^4 - x^2 - y^2 + 3x^2 * y^2 + 
 
 G = DihedralGroup(4)
 for g in G
-    @show action(poly, g)
-    @test action(poly, g) == poly #src
+    @show SymbolicWedderburn.action(DihedralAction(), g, poly)
+    @test SymbolicWedderburn.action(DihedralAction(), g, poly) == poly #src
 end
 
 # We can exploit this symmetry for reducing the problem using the `SymmetricIdeal` certificate as follows:
 
 import CSDP
-function solve(G)
-    solver = CSDP.Optimizer
+solver = CSDP.Optimizer
+
+function solve_(G, solver)
     model = Model(solver)
     @variable(model, t)
     @objective(model, Max, t)
-    certificate = SymmetricIdeal(Certificate.MaxDegree(SOSCone(), MonomialBasis, maxdegree(poly)), G, action)
+    certificate = SymmetricIdeal(Certificate.MaxDegree(SOSCone(), MonomialBasis, maxdegree(poly)), G, DihedralAction())
     con_ref = @constraint(model, poly - t in SOSCone(), ideal_certificate = certificate)
     optimize!(model)
     @test value(t) ≈ -3825/4096 rtol=1e-2 #src
@@ -115,7 +122,7 @@ function solve(G)
         println(g.basis.polynomials)
     end
 end
-solve(G)
+solve_(G, solver)
 
 # We notice that we indeed find `-3825/4096` and that symmetry was exploited.
 # In case the conjugacy classes are known, we can implement
@@ -127,10 +134,12 @@ solve(G)
 struct DihedralGroup2 <: Group
     n::Int
 end
+
 PermutationGroups.gens(G::DihedralGroup2) = [DihedralElement(G.n, false, 1), DihedralElement(G.n, true, 0)]
 _orbit(cc::Vector{<:GroupElem}) = PermutationGroups.Orbit(cc, Dict(a => nothing for a in cc))
 _orbit(el::GroupElem) = _orbit([el])
-function SymbolicWedderburn.conjugacy_classes_orbit(d::DihedralGroup2)
+
+function SymbolicWedderburn.conjugacy_classes(d::DihedralGroup2)
     orbits = [_orbit(DihedralElement(d.n, false, 0))]
     for i in 1:div(d.n - 1, 2)
         push!(orbits, _orbit([
@@ -157,7 +166,7 @@ end
 # conjugacy classes instead to verify that the polynomial is invariant under the group action.
 
 G = DihedralGroup2(4)
-for cc in SymbolicWedderburn.conjugacy_classes_orbit(G)
+for cc in SymbolicWedderburn.conjugacy_classes(G)
     for g in cc
         @show action(poly, g)
         @test action(poly, g) == poly #src
